@@ -1,49 +1,71 @@
-name: "Create a new Version Tag and Release"
-description: "Increases semver number and creates a new tag and github release based on tag"
-
+name: Create a new Version Tag and Release
+description: Increases semver number and creates a new tag and github release based on tag
 inputs:
   alias:
-    description: "Version alias, you can leave it blank or use the default v"
+    description: Version alias, you can leave it blank or use the default v
     required: false
-    default: "v"
+    default: v
   token:
-    description: "Your github token "
+    description: 'Your github token '
     required: true
-
 outputs:
   version:
-    description: "Newly generated version"
+    description: Newly generated version
     value: ${{ steps.newversion.outputs.version }}
-
 runs:
-  using: "composite"
+  using: composite
   steps:
     - name: Get a new major version
       if: contains(github.event.pull_request.labels.*.name, 'major')
-      run: echo "app_version=$(bash ${{ github.action_path }}/release.sh -m )" >> $GITHUB_ENV
       shell: bash
-
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: | # zizmor: ignore[github-env]
+        version_val="$(bash "$ACTION_PATH/release.sh" -m)"
+        delimiter="$(openssl rand -hex 8)"
+        echo "app_version<<$delimiter" >> "$GITHUB_ENV"
+        echo "$version_val" >> "$GITHUB_ENV"
+        echo "$delimiter" >> "$GITHUB_ENV"
     - name: get a new minor version
       if: contains(github.event.pull_request.labels.*.name, 'minor') && contains(github.event.pull_request.labels.*.name, 'major') != true
-      run: echo "app_version=$(bash ${{ github.action_path }}/release.sh -i )" >> $GITHUB_ENV
       shell: bash
-
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: | # zizmor: ignore[github-env]
+        version_val="$(bash "$ACTION_PATH/release.sh" -i)"
+        delimiter="$(openssl rand -hex 8)"
+        echo "app_version<<$delimiter" >> "$GITHUB_ENV"
+        echo "$version_val" >> "$GITHUB_ENV"
+        echo "$delimiter" >> "$GITHUB_ENV"
     - name: get a new patched version number
       if: contains(github.event.pull_request.labels.*.name, 'minor') != true && contains(github.event.pull_request.labels.*.name, 'major') != true
-      run: echo "app_version=$(bash ${{ github.action_path }}/release.sh -p )" >> $GITHUB_ENV
       shell: bash
-
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: | # zizmor: ignore[github-env]
+        version_val="$(bash "$ACTION_PATH/release.sh" -p)"
+        delimiter="$(openssl rand -hex 8)"
+        echo "app_version<<$delimiter" >> "$GITHUB_ENV"
+        echo "$version_val" >> "$GITHUB_ENV"
+        echo "$delimiter" >> "$GITHUB_ENV"
     - id: newversion
-      run: echo "version=${{ env.app_version }}" >> $GITHUB_OUTPUT
+      name: Set version output
       shell: bash
-
+      # $app_version is safely available here as a native bash variable because it was written to $GITHUB_ENV in the previous steps
+      run: | # zizmor: ignore[github-env]
+        delimiter="$(openssl rand -hex 8)"
+        echo "version<<$delimiter" >> "$GITHUB_OUTPUT"
+        echo "$app_version" >> "$GITHUB_OUTPUT"
+        echo "$delimiter" >> "$GITHUB_OUTPUT"
     - name: Create release
       if: github.event.pull_request.merged == true
-      uses: softprops/action-gh-release@v1
-      with:
-        token: ${{ inputs.token }}
-        body: ${{ github.event.pull_request.body }}
-        tag_name: ${{ env.app_version }}
-        name: "${{ env.app_version }}: ${{ github.event.pull_request.title }}"
-        draft: false
-        prerelease: false
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        TAG_NAME: ${{ env.app_version }}
+        PR_TITLE: ${{ github.event.pull_request.title }}
+        PR_BODY: ${{ github.event.pull_request.body }}
+      run: |
+        gh release create "$TAG_NAME" \
+          --title "$TAG_NAME: $PR_TITLE" \
+          --notes "$PR_BODY"
